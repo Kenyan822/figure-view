@@ -12,11 +12,12 @@ const LOOKS: Record<'dark' | 'light', Look> = {
   light: { fg: '#24292f', bg: '#ffffff', isDark: false },
 }
 
-// How long a draw waits for a compile before it shows the source and redraws
-// when the picture lands: long enough that a formula does not flash.
-const WAIT_MS = 400
+// How long a draw waits for a compile before it shows the source. Outside
+// fullscreen a finished answer goes to the terminal's scrollback and is not
+// drawn again, so the first draw waits for most compiles to land.
+const WAIT_MS = 3000
 // The compile worker's period and how many Typst processes it runs at once.
-const PUMP_MS = 100
+const PUMP_MS = 50
 const MAX_RUNNING = 2
 // Pictures are drawn three times as large as the terminal text by default: at
 // the text's own size, subscripts and axis labels are too small to read.
