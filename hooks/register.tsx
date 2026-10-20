@@ -1,4 +1,4 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import { compile, setUp, type Env, type Look, type Picture } from './lib/render'
 import { estimateRows, nearView } from './lib/rows'
@@ -16,8 +16,11 @@ const LOOKS: Record<'dark' | 'light', Look> = {
 // fullscreen a finished answer goes to the terminal's scrollback and is not
 // drawn again, so the first draw waits for most compiles to land.
 const WAIT_MS = 3000
-// The compile worker's period and how many Typst processes it runs at once.
+// The compile worker's period while work is queued, and while idle (each
+// tick is a dispatch, so an idle worker ticks rarely), and how many Typst
+// processes it runs at once.
 const PUMP_MS = 50
+const IDLE_MS = 1000
 const MAX_RUNNING = 2
 // Pictures kept in memory (base64 PNGs, tens of kB each); the least recently
 // drawn go first and are compiled again if they come back.
@@ -50,6 +53,9 @@ const state = {
   queue: new Map<string, { seg: Piece; columns: number; zoom: number; look: Look }>(),
   running: new Set<string>(),
   lastAnswer: '',
+  // The worker's next tick, and what runs it at once (set at session start).
+  nextTick: null as Timer | null,
+  wake: null as (() => void) | null,
   // Bumped by /figure redraw: new Image keys make the terminal get every
   // picture again (Orca drops them when its tab is switched away).
   epoch: 0,
@@ -64,7 +70,13 @@ export const register: Register = on => {
     })
     // A draw's own processes are stopped as soon as a newer draw replaces it
     // (every scroll), so the compiles run on this timer, outside any draw.
-    $.clock.every(PUMP_MS, () => pump($))
+    // A newly queued piece runs the worker at once instead of at the idle
+    // tick, so it starts compiling without waiting up to IDLE_MS.
+    state.wake = () => {
+      state.nextTick?.cancel()
+      state.nextTick = $.clock.after(0, () => tick($))
+    }
+    tick($)
     return next(e)
   })
 
@@ -189,9 +201,18 @@ async function pictureOf($: EngineInterface, seg: Piece, columns: number): Promi
   }
   if (!state.running.has(key)) {
     state.queue.set(key, { seg, columns, zoom: seg.kind === 'typst' ? state.zoom * DRAWING_SCALE : state.zoom, look: state.look })
+    state.wake?.()
   }
   for (let waited = 0; !state.pictures.has(key) && waited < WAIT_MS; waited += 50) await $.clock.sleep(50)
   return state.pictures.get(key)
+}
+
+// Runs the worker and schedules the next run: soon while pieces wait or
+// compile, rarely otherwise.
+function tick($: EngineInterface): void {
+  pump($)
+  const isBusy = state.queue.size > 0 || state.running.size > 0 || !state.envValue
+  state.nextTick = $.clock.after(isBusy ? PUMP_MS : IDLE_MS, () => tick($))
 }
 
 // The compile worker: sets up Typst once, then starts queued compiles, a few
