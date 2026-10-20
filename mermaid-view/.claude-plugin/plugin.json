@@ -1,0 +1,10 @@
+{
+  "name": "mermaid-view",
+  "version": "0.1.0",
+  "description": "Draws Mermaid diagrams in Claude's answers as coloured terminal text: flowcharts as filled cards, plus sequence, class, ER and state diagrams and simple charts.",
+  "author": { "name": "Kenyan822", "url": "https://github.com/Kenyan822" },
+  "homepage": "https://github.com/Kenyan822/figure-view",
+  "repository": "https://github.com/Kenyan822/figure-view",
+  "license": "MIT",
+  "keywords": ["mermaid", "diagram", "flowchart", "sequence", "terminal"]
+}
