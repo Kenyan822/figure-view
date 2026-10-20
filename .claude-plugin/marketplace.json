@@ -1,6 +1,9 @@
 {
   "name": "figure-view",
   "owner": { "name": "Kenyan822" },
-  "metadata": { "description": "figure-view: display math and Typst figures drawn as small pictures in Claude Code" },
-  "plugins": [{ "name": "figure-view", "source": "./" }]
+  "metadata": { "description": "figure-view: display math and Typst figures as small pictures; mermaid-view: Mermaid diagrams as terminal text, in Claude Code" },
+  "plugins": [
+    { "name": "figure-view", "source": "./" },
+    { "name": "mermaid-view", "source": "./mermaid-view" }
+  ]
 }

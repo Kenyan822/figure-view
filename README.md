@@ -50,6 +50,10 @@ Typst runs with no network (packages are vendored under `render/packages/`) and 
 - Copying a picture with the mouse copies the image's placeholder characters; use Claude Code's `/copy` for the Markdown.
 - Scrolling over pictures is not smooth: pictures are swapped in and out as the view moves.
 
+## See also
+
+[mermaid-view](mermaid-view/README.md), in the same marketplace: Mermaid diagrams drawn as terminal text (`/plugin install mermaid-view --marketplace Kenyan822/figure-view`).
+
 ## Licence
 
 MIT. The vendored Typst packages keep their own licences: see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
