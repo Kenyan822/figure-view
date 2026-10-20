@@ -28,6 +28,8 @@ const DEFAULT_ZOOM = 3
 // Drawings carry their own text and are wide already: at the formulas' zoom a
 // plot fills the screen and several megabytes of picture memory.
 const DRAWING_SCALE = 0.6
+// Blank rows above and below each picture, apart from the text around it.
+const PICTURE_MARGIN = 1
 
 const PROMPT = `In this terminal, display math and Typst drawings in your replies are drawn as pictures; the rest of a reply stays plain terminal text.
 - Display math: put LaTeX between $$ lines (or $$ … $$ on one line); it is typeset.
@@ -48,14 +50,17 @@ const state = {
   queue: new Map<string, { seg: Piece; columns: number; zoom: number; look: Look }>(),
   running: new Set<string>(),
   lastAnswer: '',
+  // Bumped by /figure redraw: new Image keys make the terminal get every
+  // picture again (Orca drops them when its tab is switched away).
+  epoch: 0,
 }
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'figure',
-      description: '数式と図だけを画像にする表示: on / off / dark / light / size <倍率%> / open / status',
-      argumentHint: '[on|off|dark|light|size <%>|open|status]',
+      description: '数式と図だけを画像にする表示: on / off / dark / light / size <倍率%> / redraw / open / status',
+      argumentHint: '[on|off|dark|light|size <%>|redraw|open|status]',
     })
     // A draw's own processes are stopped as soon as a newer draw replaces it
     // (every scroll), so the compiles run on this timer, outside any draw.
@@ -66,11 +71,16 @@ export const register: Register = on => {
   on('command.run', { command: 'figure' }, async ($, e) => {
     const arg = e.args.trim()
     if (arg === 'open') return { text: await openLastAnswer($) }
+    if (arg === 'redraw') {
+      state.epoch++
+      $.ui.invalidate('ui.render')
+      return { text: '画像を送り直しました' }
+    }
     const size = /^size\s+(\d+)%?$/.exec(arg)
     if (arg === 'on' || arg === 'off') state.isOn = arg === 'on'
     else if (arg === 'dark' || arg === 'light') state.look = LOOKS[arg]
     else if (size && Number(size[1]) >= 50 && Number(size[1]) <= 800) state.zoom = Number(size[1]) / 100
-    else if (arg && arg !== 'status') return { text: '使い方: /figure on | off | dark | light | size <50〜800> | open | status' }
+    else if (arg && arg !== 'status') return { text: '使い方: /figure on | off | dark | light | size <50〜800> | redraw | open | status' }
     $.ui.invalidate('ui.render')
     return { text: await statusOf($) }
   })
@@ -120,7 +130,7 @@ export const register: Register = on => {
     // at a time and one it dropped is sent again when it comes back in view.
     const heights = items.map(item =>
       item.kind === 'md' ? estimateRows(item.text, columns)
-      : item.kind === 'picture' ? item.picture.rows
+      : item.kind === 'picture' ? item.picture.rows + 2 * PICTURE_MARGIN
       : estimateRows(sourceOf(item.seg), columns) + (item.kind === 'failed' ? 1 : 0),
     )
     const isNear = nearView(heights, e.props.onScreen)
@@ -140,9 +150,11 @@ export const register: Register = on => {
           )
         case 'picture':
           return isNear[i] ? (
-            <Image key={`img${i}`} source={{ png: item.picture.png }} columns={item.picture.columns} rows={item.picture.rows} alt={altOf(item.seg)} />
+            <Box key={`img${i}`} marginY={PICTURE_MARGIN}>
+              <Image key={`img${i}-${state.epoch}`} source={{ png: item.picture.png }} columns={item.picture.columns} rows={item.picture.rows} alt={altOf(item.seg)} />
+            </Box>
           ) : (
-            <Box key={`off${i}`} height={item.picture.rows}>
+            <Box key={`off${i}`} height={item.picture.rows} marginY={PICTURE_MARGIN}>
               <Text dimColor wrap="truncate">{offscreenOf(item.seg)}</Text>
             </Box>
           )
