@@ -8,7 +8,7 @@ import { convertInlineMath, latexToUnicode } from './lib/unicode'
 type Piece = Exclude<Segment, { kind: 'md' }>
 
 const LOOKS: Record<'dark' | 'light', Look> = {
-  dark: { fg: '#e6e6e6', bg: '#1e1e1e', isDark: true },
+  dark: { fg: '#f2f2f2', bg: '#1e1e1e', isDark: true },
   light: { fg: '#24292f', bg: '#ffffff', isDark: false },
 }
 
