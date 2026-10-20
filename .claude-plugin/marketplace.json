@@ -1,0 +1,6 @@
+{
+  "name": "figure-view",
+  "owner": { "name": "Kenyan822" },
+  "metadata": { "description": "figure-view: display math and Typst figures drawn as small pictures in Claude Code" },
+  "plugins": [{ "name": "figure-view", "source": "./" }]
+}

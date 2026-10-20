@@ -1,0 +1,10 @@
+{
+  "name": "figure-view",
+  "version": "0.1.0",
+  "description": "Draws only the display math and Typst figures of Claude's answers as pictures in the terminal; the rest stays plain text, so pictures stay small.",
+  "author": { "name": "Kenyan822", "url": "https://github.com/Kenyan822" },
+  "homepage": "https://github.com/Kenyan822/figure-view",
+  "repository": "https://github.com/Kenyan822/figure-view",
+  "license": "MIT",
+  "keywords": ["math", "latex", "typst", "diagram", "chart", "terminal", "kitty", "orca"]
+}
