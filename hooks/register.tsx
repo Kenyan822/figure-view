@@ -15,8 +15,9 @@ const LOOKS: Record<'dark' | 'light', Look> = {
 // How long a draw waits for a compile before it shows the source and redraws
 // when the picture lands: long enough that a formula does not flash.
 const WAIT_MS = 400
-// How many times a compile the engine stopped is started again.
-const MAX_ABORTS = 3
+// The compile worker's period and how many Typst processes it runs at once.
+const PUMP_MS = 100
+const MAX_RUNNING = 2
 // Pictures are drawn three times as large as the terminal text by default: at
 // the text's own size, subscripts and axis labels are too small to read.
 const DEFAULT_ZOOM = 3
@@ -36,9 +37,11 @@ const state = {
   look: LOOKS.dark,
   zoom: DEFAULT_ZOOM,
   env: null as Promise<Env | { error: string }> | null,
+  envValue: null as Env | { error: string } | null,
   pictures: new Map<string, Picture>(),
-  inFlight: new Map<string, Promise<Picture | undefined>>(),
-  aborts: new Map<string, number>(),
+  // Pieces waiting for the worker, by key, and the keys it is compiling.
+  queue: new Map<string, { seg: Piece; columns: number; zoom: number; look: Look }>(),
+  running: new Set<string>(),
   lastAnswer: '',
 }
 
@@ -49,6 +52,9 @@ export const register: Register = on => {
       description: '数式と図だけを画像にする表示: on / off / dark / light / size <倍率%> / open / status',
       argumentHint: '[on|off|dark|light|size <%>|open|status]',
     })
+    // A draw's own processes are stopped as soon as a newer draw replaces it
+    // (every scroll), so the compiles run on this timer, outside any draw.
+    $.clock.every(PUMP_MS, () => pump($))
     return next(e)
   })
 
@@ -83,7 +89,7 @@ export const register: Register = on => {
     const hasInline = /\$[^$\n]+\$|\\\(/.test(e.props.text)
     if (!hasPicture && !hasInline) return next(e)
 
-    const ready = await envOf($)
+    const ready = state.envValue ?? { error: '準備中' }
     const { Box, Image, Markdown, Text } = $.ui.resolve(e)
     // Room beside the bullet column the engine draws before a reply.
     const columns = Math.max(10, (e.viewport?.columns ?? 80) - 4)
@@ -97,7 +103,7 @@ export const register: Register = on => {
       if (seg.kind === 'md') items.push({ kind: 'md', text: convertInlineMath(seg.text) })
       else if ('error' in ready) items.push({ kind: 'source', seg, isDim: false })
       else {
-        const picture = await pictureOf($, ready, seg, columns)
+        const picture = await pictureOf($, seg, columns)
         if (!picture) items.push({ kind: 'source', seg, isDim: true })
         else if (picture.status === 'failed') items.push({ kind: 'failed', seg, error: picture.error })
         else items.push({ kind: 'picture', seg, picture })
@@ -149,52 +155,50 @@ export const register: Register = on => {
   })
 }
 
-function envOf($: EngineInterface): Promise<Env | { error: string }> {
-  state.env ??= setUp($)
-  return state.env
-}
-
 function keyOf(seg: Piece, columns: number): string {
   return `${seg.kind}|${state.look.fg}|${state.zoom}|${columns}|${seg.src}`
 }
 
-// The picture of a finished piece: from the cache, or compiled now. A compile
-// slower than WAIT_MS answers undefined and redraws the transcript once done.
-async function pictureOf($: EngineInterface, ready: Env, seg: Piece, columns: number): Promise<Picture | undefined> {
+// The picture of a finished piece from the cache; else the piece is queued
+// for the worker, and a draw waits up to WAIT_MS before showing the source
+// (the worker redraws the transcript when the picture lands).
+async function pictureOf($: EngineInterface, seg: Piece, columns: number): Promise<Picture | undefined> {
   const key = keyOf(seg, columns)
-  const done = state.pictures.get(key)
-  if (done) return done
-  let job = state.inFlight.get(key)
-  if (!job) {
-    job = compile($, ready, seg.kind, seg.src, state.look, columns, seg.kind === 'typst' ? state.zoom * DRAWING_SCALE : state.zoom)
-      .catch((err: unknown): Picture => ({ status: 'failed', error: String(err) }))
-      .then(picture => {
-        state.inFlight.delete(key)
-        // The engine stops a draw's processes when a newer draw replaces it
-        // (a slow plot while the reply streams): not the source's fault, so
-        // the next draw compiles it again, a few times at most.
-        const tries = (state.aborts.get(key) ?? 0) + 1
-        if (isAborted(picture) && tries <= MAX_ABORTS) {
-          state.aborts.set(key, tries)
-          return undefined
-        }
-        state.aborts.delete(key)
-        state.pictures.set(key, picture)
-        return picture
-      })
-    state.inFlight.set(key, job)
+  if (!state.pictures.has(key) && !state.running.has(key)) {
+    state.queue.set(key, { seg, columns, zoom: seg.kind === 'typst' ? state.zoom * DRAWING_SCALE : state.zoom, look: state.look })
   }
-  const picture = await Promise.race([job, $.clock.sleep(WAIT_MS).then(() => undefined)])
-  if (!picture) void job.then(() => $.ui.invalidate('ui.render'))
-  return picture
+  for (let waited = 0; !state.pictures.has(key) && waited < WAIT_MS; waited += 50) await $.clock.sleep(50)
+  return state.pictures.get(key)
 }
 
-function isAborted(picture: Picture): boolean {
-  return picture.status === 'failed' && /\baborted\b/.test(picture.error)
+// The compile worker: sets up Typst once, then starts queued compiles, a few
+// at a time, and redraws the transcript as each picture lands.
+function pump($: EngineInterface): void {
+  if (!state.env) {
+    state.env = setUp($).then(env => {
+      state.envValue = env
+      $.ui.invalidate('ui.render')
+      return env
+    })
+  }
+  const env = state.envValue
+  if (!env || 'error' in env) return
+  for (const [key, job] of state.queue) {
+    if (state.running.size >= MAX_RUNNING) break
+    state.queue.delete(key)
+    state.running.add(key)
+    void compile($, env, job.seg.kind, job.seg.src, job.look, job.columns, job.zoom)
+      .catch((err: unknown): Picture => ({ status: 'failed', error: String(err) }))
+      .then(picture => {
+        state.pictures.set(key, picture)
+        state.running.delete(key)
+        $.ui.invalidate('ui.render')
+      })
+  }
 }
 
 async function statusOf($: EngineInterface): Promise<string> {
-  const ready = await envOf($)
+  const ready = state.envValue ?? (state.env ? await state.env : { error: '準備中' })
   const head = `${state.isOn ? 'on' : 'off'}（${state.look.isDark ? 'dark' : 'light'}、大きさ ${Math.round(state.zoom * 100)}%）`
   if ('error' in ready) return `${head}\n使えません: ${ready.error}`
   return `${head}\ntypst: ${ready.typst}\nセル: ${ready.cell.width.toFixed(1)} x ${ready.cell.height.toFixed(1)} px\n画像: ${state.pictures.size} 件`
