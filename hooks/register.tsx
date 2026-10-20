@@ -29,6 +29,7 @@ const PROMPT = `In this terminal, display math and Typst drawings in your replie
 - Display math: put LaTeX between $$ lines (or $$ … $$ on one line); it is typeset.
 - Inline math ($…$) is shown as Unicode text (x², α, a/b), so keep inline math short and simple; use display math for fractions, sums, matrices or anything tall.
 - Diagrams, flow charts and plots: a fenced \`\`\`typst block (Typst 0.15, markup mode, code lines start with #). Offline packages: #import "@preview/cetz:0.5.2", #import "@preview/cetz-plot:0.1.4": plot, chart, #import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge. A \`theme\` dictionary is in scope: theme.fg, theme.muted, theme.bg, theme.border, theme.blue/green/red/orange/yellow/purple, theme.palette, theme.width, theme.height, theme.dark. Default strokes are black and invisible on a dark terminal: always pass theme.fg (fletcher node-stroke/edge-stroke, cetz set-style(stroke: theme.fg)). Keep drawings within theme.width x theme.height; #page and #set page are errors.
+- When explaining a mechanism, a structure, a flow, a comparison, a trend or a calculation, add typst drawings or display math wherever they convey it better than words alone (as many as help; not for simple factual answers).
 - Tables, lists and code stay normal markdown.`
 
 // The module's own state: a reload starts it over, which only recompiles.
