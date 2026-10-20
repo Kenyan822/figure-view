@@ -11,6 +11,14 @@ A [Claude Code](https://code.claude.com) mod that draws **only the display math 
 
 Pictures are typeset with [Typst](https://typst.app) and sized to whole terminal cells. A long answer only draws the pictures within a screen of the view; the others turn into one dim line of the same height and come back when you scroll to them. This keeps a terminal's image memory small (some terminals cap it per pane, for example [Orca](https://github.com/stablyai/orca) at 32 MB).
 
+## What it looks like
+
+Sample output, typeset by the mod's own template (dark theme):
+
+![Display math rendered by figure-view](docs/images/math.png)
+
+![Figures rendered by figure-view: a data-flow diagram, an ER diagram, a radar chart, a confusion matrix, a mind map and a Transformer block](docs/images/figures.png)
+
 ## Requirements
 
 - Claude Code 2.1.298 or later (mods)
@@ -33,6 +41,7 @@ In Claude Code:
 | `/figure on` / `off` | Turns the pictures on or off |
 | `/figure size <50–800>` | Picture size in percent of the terminal text (default 300; figures are drawn at 60% of that) |
 | `/figure dark` / `light` | Colours for a dark or a light terminal |
+| `/figure redraw` | Sends every picture to the terminal again (when the terminal dropped them, as Orca does on a tab switch) |
 | `/figure open` | Writes the last answer to `.figure-view/answer.md` and opens it (in Orca's Markdown preview, or the default app) |
 
 ## How it works
@@ -49,6 +58,7 @@ Typst runs with no network (packages are vendored under `render/packages/`) and 
 - Inline math is a Unicode approximation; write tall math as display math.
 - Copying a picture with the mouse copies the image's placeholder characters; use Claude Code's `/copy` for the Markdown.
 - Scrolling over pictures is not smooth: pictures are swapped in and out as the view moves.
+- Orca keeps at most 32 MB of decoded pictures per pane ([stablyai/orca#23547](https://github.com/stablyai/orca/issues/23547)) and drops them on a tab switch ([#30383](https://github.com/stablyai/orca/issues/30383)). The mod keeps pictures small and only near the view; `/figure redraw` brings back dropped ones.
 
 ## See also
 
