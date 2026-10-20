@@ -19,6 +19,9 @@ const WAIT_MS = 3000
 // The compile worker's period and how many Typst processes it runs at once.
 const PUMP_MS = 50
 const MAX_RUNNING = 2
+// Pictures kept in memory (base64 PNGs, tens of kB each); the least recently
+// drawn go first and are compiled again if they come back.
+const MAX_PICTURES = 300
 // Pictures are drawn three times as large as the terminal text by default: at
 // the text's own size, subscripts and axis labels are too small to read.
 const DEFAULT_ZOOM = 3
@@ -166,7 +169,13 @@ function keyOf(seg: Piece, columns: number): string {
 // (the worker redraws the transcript when the picture lands).
 async function pictureOf($: EngineInterface, seg: Piece, columns: number): Promise<Picture | undefined> {
   const key = keyOf(seg, columns)
-  if (!state.pictures.has(key) && !state.running.has(key)) {
+  const kept = state.pictures.get(key)
+  if (kept) {
+    state.pictures.delete(key)
+    state.pictures.set(key, kept)
+    return kept
+  }
+  if (!state.running.has(key)) {
     state.queue.set(key, { seg, columns, zoom: seg.kind === 'typst' ? state.zoom * DRAWING_SCALE : state.zoom, look: state.look })
   }
   for (let waited = 0; !state.pictures.has(key) && waited < WAIT_MS; waited += 50) await $.clock.sleep(50)
@@ -193,6 +202,10 @@ function pump($: EngineInterface): void {
       .catch((err: unknown): Picture => ({ status: 'failed', error: String(err) }))
       .then(picture => {
         state.pictures.set(key, picture)
+        for (const old of state.pictures.keys()) {
+          if (state.pictures.size <= MAX_PICTURES) break
+          state.pictures.delete(old)
+        }
         state.running.delete(key)
         $.ui.invalidate('ui.render')
       })

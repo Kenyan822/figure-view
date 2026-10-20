@@ -34,6 +34,8 @@ export async function setUp($: EngineInterface): Promise<Env | { error: string }
   if (!typst) return { error: 'typst が見つかりません（brew install typst）' }
   const tmp = ((await $.env.get('TMPDIR')) ?? '/tmp').replace(/\/$/, '')
   const dir = `${tmp}/figure-view-${await $.session.id()}`
+  // Work folders of sessions that ended more than two days ago.
+  await $.process.run(['find', tmp, '-maxdepth', '1', '-name', 'figure-view-*', '-type', 'd', '-mtime', '+2', '-exec', 'rm', '-rf', '{}', '+'], { timeoutMs: 10000 }).catch(() => null)
   const made = await $.process.run(['mkdir', '-p', dir])
   if (made.exitCode !== 0) return { error: `作業フォルダを作れません: ${made.stderr.trim()}` }
   await $.fs.write(`${dir}/piece.typ`, PIECE_TYP)
